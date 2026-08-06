@@ -365,8 +365,11 @@ function StepConfirm({ data, onSuccess }) {
       const { data: org, error: orgErr } = await supabase
         .from('organizations')
         .insert([{ name: data.ong_name, country: data.country, contact_name: data.contact_name, contact_email: data.contact_email, website: data.website, legal_status: data.legal, description: data.ong_desc }])
-        .select().single()
+        .select()
       if (orgErr) throw orgErr
+      const { data: orgData, error: orgErr }
+
+      // Guardar proyecto
 
       // Guardar proyecto
       const { error: projErr } = await supabase
