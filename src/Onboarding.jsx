@@ -362,25 +362,47 @@ function StepConfirm({ data, onSuccess }) {
       const projectId = `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
 
       // Guardar organización
-      const { data: org, error: orgErr } = await supabase
+      const { data: orgData, error: orgErr } = await supabase
         .from('organizations')
-        .insert([{ name: data.ong_name, country: data.country, contact_name: data.contact_name, contact_email: data.contact_email, website: data.website, legal_status: data.legal, description: data.ong_desc }])
+        .insert([{
+          name: data.ong_name,
+          country: data.country,
+          contact_name: data.contact_name,
+          contact_email: data.contact_email,
+          website: data.website,
+          legal_status: data.legal,
+          description: data.ong_desc
+        }])
         .select()
       if (orgErr) throw orgErr
-      const { data: orgData, error: orgErr }
-
-      // Guardar proyecto
+      const org = orgData[0]
 
       // Guardar proyecto
       const { error: projErr } = await supabase
         .from('projects')
-        .insert([{ id: projectId, ong_id: org.id, name: data.project_name, location_name: data.location, biome: data.biome, planting_date: data.planting_date, trees_planted: +data.trees_planted, area_ha: +data.area_ha, species: data.species, method: data.method, verif_freq: data.verif_freq, description: data.description }])
+        .insert([{
+          id: projectId,
+          ong_id: org.id,
+          name: data.project_name,
+          location_name: data.location,
+          biome: data.biome,
+          planting_date: data.planting_date,
+          trees_planted: +data.trees_planted,
+          area_ha: +data.area_ha,
+          species: data.species,
+          method: data.method,
+          verif_freq: data.verif_freq,
+          description: data.description
+        }])
       if (projErr) throw projErr
 
       setPid(projectId)
       if (onSuccess) onSuccess(projectId)
-    } catch (e) { setError(e.message) }
-    finally { setSaving(false) }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (pid) return (
@@ -408,16 +430,26 @@ function StepConfirm({ data, onSuccess }) {
           <div style={{ fontSize:11, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>{title}</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
             {fields.filter(([,v])=>v).map(([l,v])=>(
-              <div key={l}><div style={{ fontSize:10, color:'#aaa' }}>{l}</div><div style={{ fontSize:12, fontWeight:500 }}>{v}</div></div>
+              <div key={l}>
+                <div style={{ fontSize:10, color:'#aaa' }}>{l}</div>
+                <div style={{ fontSize:12, fontWeight:500 }}>{v}</div>
+              </div>
             ))}
           </div>
         </div>
       ))}
       <div style={{ background:'#f9f9f7', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
         <div style={{ fontSize:11, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Polígono</div>
-        {data.polygon ? <div style={{ fontSize:12, color:'#1D9E75' }}>✓ Definido · {data.area_ha} ha</div> : <div style={{ fontSize:12, color:'#E24B4A' }}>⚠ Sin polígono</div>}
+        {data.polygon
+          ? <div style={{ fontSize:12, color:'#1D9E75' }}>✓ Definido · {data.area_ha} ha</div>
+          : <div style={{ fontSize:12, color:'#E24B4A' }}>⚠ Sin polígono</div>
+        }
       </div>
-      {error && <div style={{ background:'#FEF2F2', border:'0.5px solid #FECACA', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#991B1B', marginBottom:14 }}>{error}</div>}
+      {error && (
+        <div style={{ background:'#FEF2F2', border:'0.5px solid #FECACA', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#991B1B', marginBottom:14 }}>
+          {error}
+        </div>
+      )}
       <label style={{ fontSize:13, display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer', marginBottom:16 }}>
         <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{ marginTop:2, width:'auto' }} />
         <span>Acepto los términos del servicio y confirmo que los datos son correctos.</span>
