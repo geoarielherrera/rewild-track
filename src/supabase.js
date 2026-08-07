@@ -44,9 +44,8 @@ export async function fetchLatestReport(projectId) {
     .eq('project_id', projectId)
     .order('report_date', { ascending: false })
     .limit(1)
-    .single()
   if (error) throw error
-  return data
+  return data?.[0] || null
 }
 
 // ── SPONSORS ──────────────────────────────────────────────────
@@ -56,9 +55,8 @@ export async function fetchSponsor(projectId) {
     .select('*')
     .eq('project_id', projectId)
     .limit(1)
-    .single()
   if (error) throw error
-  return data
+  return data?.[0] || null
 }
 
 // ── ORGANIZACIONES ────────────────────────────────────────────
