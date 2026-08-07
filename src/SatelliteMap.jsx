@@ -1,0 +1,183 @@
+import { useState, useEffect, useRef } from 'react'
+
+const CLIENT_ID     = import.meta.env.VITE_COPERNICUS_CLIENT_ID
+const CLIENT_SECRET = import.meta.env.VITE_COPERNICUS_CLIENT_SECRET
+const TOKEN_URL     = 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token'
+const WMS_URL       = 'https://sh.dataspace.copernicus.eu/wms'
+
+// ── Obtener token OAuth ───────────────────────────────────────
+async function getToken() {
+  const cached = sessionStorage.getItem('copernicus_token')
+  const expiry  = sessionStorage.getItem('copernicus_token_expiry')
+  if (cached && expiry && Date.now() < +expiry) return cached
+
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    }),
+  })
+  if (!res.ok) throw new Error('Error al obtener token de Copernicus')
+  const data = await res.json()
+  sessionStorage.setItem('copernicus_token', data.access_token)
+  sessionStorage.setItem('copernicus_token_expiry', Date.now() + (data.expires_in - 60) * 1000)
+  return data.access_token
+}
+
+// ── Calcular bounding box desde coordenadas GeoJSON ──────────
+function getBBox(geojson) {
+  const coords = geojson.coordinates[0]
+  const lngs = coords.map(c => c[0])
+  const lats = coords.map(c => c[1])
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  // Agregar margen del 20%
+  const dLng = (maxLng - minLng) * 0.2
+  const dLat = (maxLat - minLat) * 0.2
+  return {
+    minLng: minLng - dLng, maxLng: maxLng + dLng,
+    minLat: minLat - dLat, maxLat: maxLat + dLat,
+  }
+}
+
+// ── Construir URL WMS de Sentinel-2 ──────────────────────────
+function buildWmsUrl(token, bbox, date, width = 600, height = 400) {
+  const { minLng, maxLng, minLat, maxLat } = bbox
+  const params = new URLSearchParams({
+    SERVICE:     'WMS',
+    REQUEST:     'GetMap',
+    VERSION:     '1.3.0',
+    LAYERS:      'TRUE-COLOR-S2L2A',
+    STYLES:      '',
+    FORMAT:      'image/jpeg',
+    TRANSPARENT: 'false',
+    WIDTH:       width,
+    HEIGHT:      height,
+    CRS:         'EPSG:4326',
+    BBOX:        `${minLat},${minLng},${maxLat},${maxLng}`,
+    TIME:        date,
+    MAXCC:       '20',
+  })
+  return `${WMS_URL}?${params.toString()}&access_token=${token}`
+}
+
+// ── Dibujar polígono sobre el canvas ─────────────────────────
+function drawPolygon(canvas, geojson, bbox) {
+  const ctx = canvas.getContext('2d')
+  const { minLng, maxLng, minLat, maxLat } = bbox
+  const w = canvas.width, h = canvas.height
+
+  function toPixel(lng, lat) {
+    const x = ((lng - minLng) / (maxLng - minLng)) * w
+    const y = h - ((lat - minLat) / (maxLat - minLat)) * h
+    return { x, y }
+  }
+
+  const coords = geojson.coordinates[0]
+
+  // Sombra exterior
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'
+  ctx.shadowBlur  = 4
+
+  // Área translúcida
+  ctx.beginPath()
+  coords.forEach((c, i) => {
+    const { x, y } = toPixel(c[0], c[1])
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(29,158,117,0.15)'
+  ctx.fill()
+
+  // Borde
+  ctx.shadowBlur  = 0
+  ctx.strokeStyle = '#1D9E75'
+  ctx.lineWidth   = 2.5
+  ctx.setLineDash([])
+  ctx.stroke()
+
+  // Vértices
+  coords.forEach((c, i) => {
+    const { x, y } = toPixel(c[0], c[1])
+    ctx.beginPath()
+    ctx.arc(x, y, 5, 0, Math.PI * 2)
+    ctx.fillStyle   = i === 0 ? '#E24B4A' : '#1D9E75'
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth   = 2
+    ctx.stroke()
+  })
+}
+
+// ── Componente principal ──────────────────────────────────────
+export default function SatelliteMap({ geojson, date, width = 600, height = 400, className }) {
+  const canvasRef    = useRef(null)
+  const [status, setStatus] = useState('loading') // loading | ready | error
+  const [errMsg, setErrMsg] = useState('')
+
+  useEffect(() => {
+    if (!geojson) return
+    setStatus('loading')
+
+    async function load() {
+      try {
+        const token    = await getToken()
+        const bbox     = getBBox(geojson)
+        const imgDate  = date || new Date().toISOString().split('T')[0]
+        const imgUrl   = buildWmsUrl(token, bbox, imgDate, width, height)
+
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          const canvas = canvasRef.current
+          if (!canvas) return
+          canvas.width  = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, width, height)
+          drawPolygon(canvas, geojson, bbox)
+          setStatus('ready')
+        }
+        img.onerror = () => {
+          setErrMsg('No se pudo cargar la imagen satelital. Verificá las credenciales.')
+          setStatus('error')
+        }
+        img.src = imgUrl
+      } catch (e) {
+        setErrMsg(e.message)
+        setStatus('error')
+      }
+    }
+
+    load()
+  }, [geojson, date])
+
+  if (!geojson) return null
+
+  return (
+    <div style={{ position: 'relative', width, maxWidth: '100%', borderRadius: 10, overflow: 'hidden', border: '0.5px solid #ddd' }}>
+      {status === 'loading' && (
+        <div style={{ position: 'absolute', inset: 0, background: '#1a2a1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, zIndex: 10 }}>
+          <div style={{ width: 32, height: 32, border: '3px solid #1D9E75', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Cargando imagen Sentinel-2…</span>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+      {status === 'error' && (
+        <div style={{ width, height, background: '#1a2a1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ fontSize: 24 }}>🛰️</span>
+          <span style={{ fontSize: 12, color: '#E24B4A', textAlign: 'center', maxWidth: 280, padding: '0 16px' }}>{errMsg}</span>
+        </div>
+      )}
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto' }} />
+      {status === 'ready' && (
+        <div style={{ position: 'absolute', bottom: 6, right: 8, fontSize: 10, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: 4 }}>
+          © Copernicus / ESA · Sentinel-2
+        </div>
+      )}
+    </div>
+  )
+}

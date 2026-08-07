@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { fetchProject, fetchNDVI, fetchLatestReport, fetchSponsor } from './supabase'
+import SatelliteMap from './SatelliteMap'
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 
 const ndviColor = v => v >= 0.5 ? '#1a7a3f' : v >= 0.3 ? '#1D9E75' : v >= 0.1 ? '#a8c840' : '#c8b830'
@@ -244,6 +245,17 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
                 </div>
                 <span style={{ fontSize: 32 }}>🛰️</span>
               </div>
+
+              {project.polygon && (
+                <div style={{ marginBottom: 20 }}>
+                  <SatelliteMap
+                    geojson={project.polygon}
+                    date={report.report_date}
+                    width={600}
+                    height={280}
+                  />
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                 {[
