@@ -18,10 +18,14 @@ export async function fetchProjects() {
 export async function fetchProject(id) {
   const { data, error } = await supabase
     .from('projects')
-    .select('*')
+    .select('*, polygon:polygon::text')
     .eq('id', id)
     .single()
   if (error) throw error
+  // Convertir el polígono WKB a GeoJSON
+  if (data?.polygon) {
+    try { data.polygon = JSON.parse(data.polygon) } catch { data.polygon = null }
+  }
   return data
 }
 
