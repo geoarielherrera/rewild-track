@@ -1,5 +1,4 @@
-// api/copernicus-token.js
-// Vercel Serverless Function — obtiene token de Copernicus sin CORS
+// api/copernicus-token.js — CommonJS para Vercel Functions
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -26,7 +25,7 @@ module.exports = async function handler(req, res) {
           grant_type:    'client_credentials',
           client_id:     CLIENT_ID,
           client_secret: CLIENT_SECRET,
-        }),
+        }).toString(),
       }
     )
 
