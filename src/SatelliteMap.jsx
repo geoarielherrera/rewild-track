@@ -69,7 +69,7 @@ export default function SatelliteMap({ geojson, date, width = 600, height = 400 
         const bboxStr = `${bbox.minLat},${bbox.minLng},${bbox.maxLat},${bbox.maxLng}`
 
         // Usa el proxy de Vercel — evita CORS
-        const imgUrl = `/api/satellite-image?bbox=${encodeURIComponent(bboxStr)}&date=${imgDate}&width=${width}&height=${height}`
+        const imgUrl = `/api/satellite-image.cjs?bbox=${encodeURIComponent(bboxStr)}&date=${imgDate}&width=${width}&height=${height}`
 
         const img = new Image()
         img.onload = () => {
