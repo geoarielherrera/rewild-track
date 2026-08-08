@@ -37,18 +37,17 @@ function drawPolygon(canvas, geojson, bbox) {
   ctx.fillStyle = 'rgba(29,158,117,0.18)'
   ctx.fill()
   ctx.strokeStyle = '#1D9E75'
-  ctx.lineWidth = 2.5
-  ctx.setLineDash([])
+  ctx.lineWidth   = 2.5
   ctx.stroke()
 
   coords.forEach((c, i) => {
     const { x, y } = toPixel(c[0], c[1])
     ctx.beginPath()
     ctx.arc(x, y, 5, 0, Math.PI * 2)
-    ctx.fillStyle = i === 0 ? '#E24B4A' : '#1D9E75'
+    ctx.fillStyle   = i === 0 ? '#E24B4A' : '#1D9E75'
     ctx.fill()
     ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 2
+    ctx.lineWidth   = 2
     ctx.stroke()
   })
 }
@@ -66,9 +65,11 @@ export default function SatelliteMap({ geojson, date, width = 600, height = 400 
       try {
         const bbox    = getBBox(geojson)
         const imgDate = date ? date.slice(0, 10) : new Date().toISOString().slice(0, 10)
+
+        // Armar bbox string para la API
         const bboxStr = `${bbox.minLat},${bbox.minLng},${bbox.maxLat},${bbox.maxLng}`
 
-        // Usa el proxy de Vercel — evita CORS
+        // Llamar al proxy de Vercel — evita CORS
         const imgUrl = `/api/satellite-image?bbox=${encodeURIComponent(bboxStr)}&date=${imgDate}&width=${width}&height=${height}`
 
         const img = new Image()
@@ -113,10 +114,7 @@ export default function SatelliteMap({ geojson, date, width = 600, height = 400 
           <span style={{ fontSize: 12, color: '#E24B4A', textAlign: 'center', maxWidth: 280, padding: '0 16px' }}>{errMsg}</span>
         </div>
       )}
-      <canvas
-        ref={canvasRef}
-        style={{ display: status === 'ready' ? 'block' : 'none', width: '100%', height: 'auto' }}
-      />
+      <canvas ref={canvasRef} style={{ display: status === 'ready' ? 'block' : 'none', width: '100%', height: 'auto' }} />
       {status === 'ready' && (
         <div style={{ position: 'absolute', bottom: 6, right: 8, fontSize: 10, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: 4 }}>
           © Copernicus / ESA · Sentinel-2
