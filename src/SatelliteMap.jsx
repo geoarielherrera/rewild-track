@@ -10,19 +10,8 @@ async function getToken() {
   const expiry  = sessionStorage.getItem('copernicus_token_expiry')
   if (cached && expiry && Date.now() < +expiry) return cached
 
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type:    'client_credentials',
-      client_id:     CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-    }),
-  })
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`Token error ${res.status}: ${txt}`)
-  }
+  const res = await fetch('/api/copernicus-token', { method: 'POST' })
+  if (!res.ok) throw new Error('Error al obtener token de Copernicus')
   const data = await res.json()
   sessionStorage.setItem('copernicus_token', data.access_token)
   sessionStorage.setItem('copernicus_token_expiry', Date.now() + (data.expires_in - 60) * 1000)
