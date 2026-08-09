@@ -29,11 +29,12 @@ function TileMap({ onPolygonChange }) {
   const dragRef    = useRef(null)
   const pointsRef  = useRef([])
   const closedRef  = useRef(false)
-  const [info, setInfo]   = useState('Hacé clic para agregar puntos · Doble clic para cerrar')
-  const [area, setArea]   = useState(null)
-  const [mode, setMode]   = useState('draw')
+  const isDragging = useRef(false)
+  const [info, setInfo]     = useState('Hacé clic para agregar puntos · Usá el botón para cerrar el polígono')
+  const [area, setArea]     = useState(null)
+  const [mode, setMode]     = useState('draw')
   const [coords, setCoords] = useState('')
-  const lastClick = useRef(0)
+  const [, forceUpdate]     = useState(0)
 
   function latLngToPixel(lat, lng, view, w, h) {
     const z = view.zoom, n = Math.pow(2, z)
@@ -81,12 +82,12 @@ function TileMap({ onPolygonChange }) {
     const cx = (view.lng + 180) / 360 * n
     const latRc = view.lat * Math.PI / 180
     const cy = (1 - Math.log(Math.tan(latRc) + 1 / Math.cos(latRc)) / Math.PI) / 2 * n
-    const tx0 = Math.floor(cx - w / 2 / 256), ty0 = Math.floor(cy - h / 2 / 256)
-    const tx1 = Math.ceil(cx + w / 2 / 256),  ty1 = Math.ceil(cy + h / 2 / 256)
+    const tx0 = Math.floor(cx - w/2/256), ty0 = Math.floor(cy - h/2/256)
+    const tx1 = Math.ceil(cx + w/2/256),  ty1 = Math.ceil(cy + h/2/256)
     for (let tx = tx0; tx <= tx1; tx++) {
       for (let ty = ty0; ty <= ty1; ty++) {
-        const px = (tx - cx) * 256 + w / 2
-        const py = (ty - cy) * 256 + h / 2
+        const px = (tx - cx) * 256 + w/2
+        const py = (ty - cy) * 256 + h/2
         const key = `${z}/${tx}/${ty}`
         const cached = tilesRef.current[key]
         if (cached) { ctx.drawImage(cached, Math.round(px), Math.round(py), 256, 256) }
@@ -102,40 +103,42 @@ function TileMap({ onPolygonChange }) {
     if (pts.length > 0) {
       if (closedRef.current) {
         ctx.beginPath()
-        pts.forEach((p, i) => { const { x, y } = latLngToPixel(p.lat, p.lng, view, w, h); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
+        pts.forEach((p, i) => { const {x,y} = latLngToPixel(p.lat,p.lng,view,w,h); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y) })
         ctx.closePath()
         ctx.fillStyle = 'rgba(29,158,117,0.18)'; ctx.fill()
         ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2; ctx.stroke()
       } else {
         ctx.beginPath()
-        pts.forEach((p, i) => { const { x, y } = latLngToPixel(p.lat, p.lng, view, w, h); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
-        ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([])
+        pts.forEach((p, i) => { const {x,y} = latLngToPixel(p.lat,p.lng,view,w,h); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y) })
+        ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([])
       }
       pts.forEach((p, i) => {
-        const { x, y } = latLngToPixel(p.lat, p.lng, view, w, h)
-        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2)
-        ctx.fillStyle = i === 0 ? '#E24B4A' : '#1D9E75'; ctx.fill()
+        const {x,y} = latLngToPixel(p.lat,p.lng,view,w,h)
+        ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2)
+        ctx.fillStyle = i===0?'#E24B4A':'#1D9E75'; ctx.fill()
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke()
       })
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(0, h - 18, 165, 18)
-    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.fillText('© OpenStreetMap contributors', 4, h - 5)
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(8, 8, 28, 60)
-    ctx.fillStyle = '#444'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('+', 14, 30)
-    ctx.fillStyle = '#ccc'; ctx.fillRect(12, 36, 20, 1)
-    ctx.fillStyle = '#444'; ctx.fillText('−', 15, 58)
+    // Atribución
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(0,h-18,165,18)
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.fillText('© OpenStreetMap contributors',4,h-5)
+    // Botones zoom
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(8,8,28,60)
+    ctx.fillStyle = '#444'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('+',14,30)
+    ctx.fillStyle = '#ccc'; ctx.fillRect(12,36,20,1)
+    ctx.fillStyle = '#444'; ctx.fillText('−',15,58)
   }
 
   function calcAreaHa(pts) {
     if (pts.length < 3) return 0
     const R = 6371000; let a = 0
     for (let i = 0; i < pts.length; i++) {
-      const j = (i + 1) % pts.length
-      const la1 = pts[i].lat * Math.PI / 180, la2 = pts[j].lat * Math.PI / 180
-      const lo1 = pts[i].lng * Math.PI / 180, lo2 = pts[j].lng * Math.PI / 180
-      a += (lo2 - lo1) * (2 + Math.sin(la1) + Math.sin(la2))
+      const j = (i+1)%pts.length
+      const la1=pts[i].lat*Math.PI/180, la2=pts[j].lat*Math.PI/180
+      const lo1=pts[i].lng*Math.PI/180, lo2=pts[j].lng*Math.PI/180
+      a += (lo2-lo1)*(2+Math.sin(la1)+Math.sin(la2))
     }
-    return Math.abs(a * R * R / 2) / 10000
+    return Math.abs(a*R*R/2)/10000
   }
 
   function closePolygon() {
@@ -143,16 +146,23 @@ function TileMap({ onPolygonChange }) {
     closedRef.current = true
     const ha = calcAreaHa(pointsRef.current)
     setArea(ha.toFixed(2))
-    setInfo(`✓ Polígono cerrado · ${ha.toFixed(2)} ha`)
-    const geojson = { type:'Polygon', coordinates:[[...pointsRef.current.map(p=>[p.lng,p.lat]),[pointsRef.current[0].lng,pointsRef.current[0].lat]]] }
+    setInfo(`✓ Polígono cerrado · ${ha.toFixed(2)} ha · ${pointsRef.current.length} vértices`)
+    const geojson = {
+      type: 'Polygon',
+      coordinates: [[...pointsRef.current.map(p=>[p.lng,p.lat]), [pointsRef.current[0].lng,pointsRef.current[0].lat]]]
+    }
     onPolygonChange(geojson, ha.toFixed(2))
+    forceUpdate(n=>n+1)
     draw()
   }
 
   function reset() {
     pointsRef.current = []; closedRef.current = false
-    setArea(null); setInfo('Hacé clic para agregar puntos · Doble clic para cerrar')
-    onPolygonChange(null, null); draw()
+    setArea(null)
+    setInfo('Hacé clic para agregar puntos · Usá el botón para cerrar el polígono')
+    onPolygonChange(null, null)
+    forceUpdate(n=>n+1)
+    draw()
   }
 
   function initCanvas(el) {
@@ -162,63 +172,82 @@ function TileMap({ onPolygonChange }) {
     draw()
   }
 
-  function handleClick(e) {
-    const rect = canvasRef.current.getBoundingClientRect()
-    const px = e.clientX - rect.left, py = e.clientY - rect.top
-    const w = canvasRef.current.width, h = canvasRef.current.height
-    if (px >= 8 && px <= 36) {
-      if (py >= 8  && py <= 36) { viewRef.current = { ...viewRef.current, zoom: Math.min(18, viewRef.current.zoom + 1) }; tilesRef.current = {}; draw(); return }
-      if (py >= 38 && py <= 66) { viewRef.current = { ...viewRef.current, zoom: Math.max(8,  viewRef.current.zoom - 1) }; tilesRef.current = {}; draw(); return }
-    }
-    if (closedRef.current) return
-    const now = Date.now()
-    if (now - lastClick.current < 350) { closePolygon(); lastClick.current = 0; return }
-    lastClick.current = now
-    setTimeout(() => {
-      if (Date.now() - lastClick.current < 350) return
-      const ll = pixelToLatLng(px, py, viewRef.current, w, h)
-      pointsRef.current.push(ll)
-      const n = pointsRef.current.length
-      setInfo(n < 3 ? `${n} punto${n>1?'s':''} · Necesitás al menos 3` : `${n} puntos · Doble clic para cerrar`)
-      draw()
-    }, 200)
+  function handleMouseDown(e) {
+    isDragging.current = false
+    dragRef.current = { x: e.clientX, y: e.clientY, lat: viewRef.current.lat, lng: viewRef.current.lng }
   }
 
-  function handleMouseDown(e) { dragRef.current = { x: e.clientX, y: e.clientY, lat: viewRef.current.lat, lng: viewRef.current.lng } }
   function handleMouseMove(e) {
     if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.x, dy = e.clientY - dragRef.current.y
-    const z = viewRef.current.zoom, n = Math.pow(2, z)
-    const latR = dragRef.current.lat * Math.PI / 180
-    viewRef.current = { zoom: z, lat: dragRef.current.lat + dy/256/n*360*Math.cos(latR)*0.8, lng: dragRef.current.lng - dx/256/n*360 }
+    const dx = e.clientX - dragRef.current.x
+    const dy = e.clientY - dragRef.current.y
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging.current = true
+    const z = viewRef.current.zoom, n = Math.pow(2,z)
+    const latR = dragRef.current.lat * Math.PI/180
+    viewRef.current = { zoom:z, lat:dragRef.current.lat+dy/256/n*360*Math.cos(latR)*0.8, lng:dragRef.current.lng-dx/256/n*360 }
     draw()
   }
+
   function handleMouseUp() { dragRef.current = null }
+
+  function handleClick(e) {
+    // Si fue un drag, ignorar
+    if (isDragging.current) return
+
+    const rect = canvasRef.current.getBoundingClientRect()
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+    const w  = canvasRef.current.width
+    const h  = canvasRef.current.height
+
+    // Botones zoom
+    if (px >= 8 && px <= 36) {
+      if (py >= 8  && py <= 36) { viewRef.current = { ...viewRef.current, zoom: Math.min(18, viewRef.current.zoom+1) }; tilesRef.current = {}; draw(); return }
+      if (py >= 38 && py <= 66) { viewRef.current = { ...viewRef.current, zoom: Math.max(8,  viewRef.current.zoom-1) }; tilesRef.current = {}; draw(); return }
+    }
+
+    if (closedRef.current) return
+
+    const ll = pixelToLatLng(px, py, viewRef.current, w, h)
+    pointsRef.current.push(ll)
+    const n = pointsRef.current.length
+    setInfo(n < 3
+      ? `${n} punto${n>1?'s':''} · Necesitás al menos 3`
+      : `${n} puntos · Presioná "Cerrar polígono" cuando termines`)
+    forceUpdate(x=>x+1)
+    draw()
+  }
+
   function handleWheel(e) {
     e.preventDefault()
-    viewRef.current = { ...viewRef.current, zoom: Math.min(18, Math.max(8, viewRef.current.zoom + (e.deltaY > 0 ? -1 : 1))) }
+    viewRef.current = { ...viewRef.current, zoom: Math.min(18, Math.max(8, viewRef.current.zoom+(e.deltaY>0?-1:1))) }
     tilesRef.current = {}; draw()
   }
 
   function loadCoords() {
     try {
       const pts = coords.trim().split('\n').filter(Boolean).map(l => {
-        const [a, b] = l.split(/[\s,;]+/).map(Number)
+        const [a,b] = l.split(/[\s,;]+/).map(Number)
         if (isNaN(a)||isNaN(b)) throw new Error()
-        return { lat: a, lng: b }
+        return { lat:a, lng:b }
       })
       if (pts.length < 3) { alert('Necesitás al menos 3 puntos.'); return }
       reset()
       pointsRef.current = pts; closedRef.current = true
       const avg = pts.reduce((s,p)=>({lat:s.lat+p.lat/pts.length,lng:s.lng+p.lng/pts.length}),{lat:0,lng:0})
-      viewRef.current = { lat: avg.lat, lng: avg.lng, zoom: 15 }
+      viewRef.current = { lat:avg.lat, lng:avg.lng, zoom:15 }
       tilesRef.current = {}
       const ha = calcAreaHa(pts)
-      setArea(ha.toFixed(2)); setInfo(`✓ Polígono cargado · ${ha.toFixed(2)} ha`)
+      setArea(ha.toFixed(2))
+      setInfo(`✓ Polígono cargado · ${ha.toFixed(2)} ha`)
       const geojson = { type:'Polygon', coordinates:[[...pts.map(p=>[p.lng,p.lat]),[pts[0].lng,pts[0].lat]]] }
-      onPolygonChange(geojson, ha.toFixed(2)); draw()
+      onPolygonChange(geojson, ha.toFixed(2))
+      forceUpdate(n=>n+1)
+      draw()
     } catch { alert('Formato inválido. Usá: lat, lng por línea.') }
   }
+
+  const showCloseBtn = !closedRef.current && pointsRef.current.length >= 3
 
   return (
     <div>
@@ -229,19 +258,39 @@ function TileMap({ onPolygonChange }) {
       </div>
       {mode === 'coords' && (
         <div style={{ marginBottom:10 }}>
-          <textarea value={coords} onChange={e=>setCoords(e.target.value)} placeholder={'-31.225, -64.340\n-31.225, -64.330\n-31.235, -64.330'} style={{ width:'100%', height:80, fontSize:12, fontFamily:'monospace', padding:'8px', border:'0.5px solid #ddd', borderRadius:8, resize:'vertical', boxSizing:'border-box' }} />
+          <textarea value={coords} onChange={e=>setCoords(e.target.value)}
+            placeholder={'-31.225, -64.340\n-31.225, -64.330\n-31.235, -64.330'}
+            style={{ width:'100%', height:80, fontSize:12, fontFamily:'monospace', padding:'8px', border:'0.5px solid #ddd', borderRadius:8, resize:'vertical', boxSizing:'border-box' }} />
           <button onClick={loadCoords} style={{ fontSize:12, padding:'6px 16px', background:'#1D9E75', color:'white', border:'none', borderRadius:8, cursor:'pointer', marginTop:6 }}>Cargar polígono</button>
         </div>
       )}
       <div style={{ fontSize:12, color:'#555', background:'#f0f7f4', border:'0.5px solid #c8e6d8', borderRadius:8, padding:'7px 12px', marginBottom:6 }}>💡 {info}</div>
       <div style={{ width:'100%', height:340, borderRadius:10, border:'0.5px solid #ddd', overflow:'hidden', cursor:'crosshair' }}>
         <canvas ref={initCanvas} style={{ width:'100%', height:'100%', display:'block' }}
-          onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel} />
+          onClick={handleClick}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel} />
       </div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8 }}>
-        {area ? <span style={{ fontSize:13, color:'#1D9E75', fontWeight:500 }}>✓ Área: <b>{area} ha</b></span> : <span style={{ fontSize:12, color:'#aaa' }}>Sin polígono definido</span>}
-        {area && <button onClick={reset} style={{ fontSize:11, padding:'4px 12px', borderRadius:6, border:'0.5px solid #ddd', background:'#fff', cursor:'pointer', color:'#888' }}>Reiniciar</button>}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8, gap:8 }}>
+        <div>
+          {area
+            ? <span style={{ fontSize:13, color:'#1D9E75', fontWeight:500 }}>✓ Área: <b>{area} ha</b></span>
+            : <span style={{ fontSize:12, color:'#aaa' }}>Sin polígono definido</span>
+          }
+        </div>
+        <div style={{ display:'flex', gap:6' }}>
+          {showCloseBtn && (
+            <button onClick={closePolygon} style={{ fontSize:12, padding:'6px 14px', borderRadius:8, border:'0.5px solid #1D9E75', background:'#EAF3DE', color:'#1D9E75', cursor:'pointer', fontWeight:500 }}>
+              ✓ Cerrar polígono
+            </button>
+          )}
+          {(area || pointsRef.current.length > 0) && (
+            <button onClick={reset} style={{ fontSize:11, padding:'4px 12px', borderRadius:6, border:'0.5px solid #ddd', background:'#fff', cursor:'pointer', color:'#888' }}>Reiniciar</button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -365,36 +414,47 @@ function StepConfirm({ data, onSuccess }) {
       const { data: orgData, error: orgErr } = await supabase
         .from('organizations')
         .insert([{
-          name: data.ong_name,
-          country: data.country,
-          contact_name: data.contact_name,
+          name:          data.ong_name,
+          country:       data.country,
+          contact_name:  data.contact_name,
           contact_email: data.contact_email,
-          website: data.website,
-          legal_status: data.legal,
-          description: data.ong_desc
+          website:       data.website,
+          legal_status:  data.legal,
+          description:   data.ong_desc,
         }])
         .select()
       if (orgErr) throw orgErr
       const org = orgData[0]
 
-      // Guardar proyecto
+      // Guardar proyecto — incluye el polígono como GeoJSON
+      const projectPayload = {
+        id:            projectId,
+        ong_id:        org.id,
+        name:          data.project_name,
+        location_name: data.location,
+        biome:         data.biome,
+        planting_date: data.planting_date,
+        trees_planted: +data.trees_planted,
+        area_ha:       +data.area_ha,
+        species:       data.species,
+        method:        data.method,
+        verif_freq:    data.verif_freq,
+        description:   data.description,
+      }
+
+      // Agregar polígono si existe — usar ST_GeomFromGeoJSON via RPC
       const { error: projErr } = await supabase
         .from('projects')
-        .insert([{
-          id: projectId,
-          ong_id: org.id,
-          name: data.project_name,
-          location_name: data.location,
-          biome: data.biome,
-          planting_date: data.planting_date,
-          trees_planted: +data.trees_planted,
-          area_ha: +data.area_ha,
-          species: data.species,
-          method: data.method,
-          verif_freq: data.verif_freq,
-          description: data.description
-        }])
+        .insert([projectPayload])
       if (projErr) throw projErr
+
+      // Guardar polígono por separado con SQL si existe
+      if (data.polygon) {
+        await supabase.rpc('set_project_polygon', {
+          project_id:   projectId,
+          geojson_text: JSON.stringify(data.polygon),
+        })
+      }
 
       setPid(projectId)
       if (onSuccess) onSuccess(projectId)
@@ -442,7 +502,7 @@ function StepConfirm({ data, onSuccess }) {
         <div style={{ fontSize:11, fontWeight:500, color:'#888', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:6 }}>Polígono</div>
         {data.polygon
           ? <div style={{ fontSize:12, color:'#1D9E75' }}>✓ Definido · {data.area_ha} ha</div>
-          : <div style={{ fontSize:12, color:'#E24B4A' }}>⚠ Sin polígono</div>
+          : <div style={{ fontSize:12, color:'#E24B4A' }}>⚠ Sin polígono — volvé al paso anterior</div>
         }
       </div>
       {error && (
@@ -516,7 +576,7 @@ export default function Onboarding({ onSuccess }) {
         {step < STEPS.length-1 && (
           <div style={{ display:'flex', justifyContent:'space-between', marginTop:14 }}>
             <button onClick={()=>setStep(s=>s-1)} disabled={step===0} style={{ padding:'9px 22px', borderRadius:8, border:'0.5px solid #ddd', background:'#fff', fontSize:13, cursor:step===0?'not-allowed':'pointer', color:step===0?'#ccc':'#555' }}>← Anterior</button>
-            <button onClick={()=>{ if(canNext[step]()) setStep(s=>s+1); else alert('Completá los campos obligatorios (*).') }} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'#1D9E75', color:'white', fontSize:13, fontWeight:500, cursor:'pointer' }}>Siguiente →</button>
+            <button onClick={()=>{ if(canNext[step]()) setStep(s=>s+1); else alert('Completá los campos obligatorios (*).')}} style={{ padding:'9px 24px', borderRadius:8, border:'none', background:'#1D9E75', color:'white', fontSize:13, fontWeight:500, cursor:'pointer' }}>Siguiente →</button>
           </div>
         )}
       </div>
