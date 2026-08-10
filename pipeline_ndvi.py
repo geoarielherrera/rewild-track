@@ -3,7 +3,8 @@ pipeline_ndvi.py
 Calcula NDVI automático con Sentinel-2 via Google Earth Engine
 y guarda los resultados en Supabase.
 
-Uso: python pipeline_ndvi.py
+Uso local:  python pipeline_ndvi.py
+GitHub Actions: se autentica automáticamente con service account
 """
 
 import ee
@@ -14,12 +15,30 @@ import os
 from supabase import create_client
 
 # ── Configuración ──────────────────────────────────────────────
-GEE_PROJECT    = 'siempremonte'
-SUPABASE_URL   = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY   = os.environ.get('SUPABASE_KEY')
+GEE_PROJECT  = 'siempremonte'
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
-# ── Inicializar clientes ───────────────────────────────────────
-ee.Initialize(project=GEE_PROJECT)
+# ── Inicializar Earth Engine ───────────────────────────────────
+key_data = os.environ.get('GEE_SERVICE_ACCOUNT_KEY')
+if key_data:
+    # GitHub Actions — usar cuenta de servicio
+    key_path = '/tmp/gee_key.json'
+    with open(key_path, 'w') as f:
+        f.write(key_data)
+    key_info    = json.loads(key_data)
+    credentials = ee.ServiceAccountCredentials(
+        email    = key_info['client_email'],
+        key_file = key_path
+    )
+    ee.Initialize(credentials=credentials, project=GEE_PROJECT)
+    print("✓ Earth Engine inicializado con cuenta de servicio")
+else:
+    # Local — usar credenciales del usuario (ee.Authenticate() previo)
+    ee.Initialize(project=GEE_PROJECT)
+    print("✓ Earth Engine inicializado con credenciales locales")
+
+# ── Inicializar Supabase ───────────────────────────────────────
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ── Cálculos ecológicos ────────────────────────────────────────
@@ -37,11 +56,8 @@ def classify_status(delta_ndvi, green_gain):
     if delta_ndvi >= 0:                         return 'En riesgo'
     return 'Fallido'
 
-# ── Calcular NDVI de un polígono en una fecha ──────────────────
+# ── Calcular NDVI de un polígono en un período ─────────────────
 def get_ndvi_stats(polygon_geojson, start_date, end_date):
-    """
-    Retorna lista de registros NDVI entre start_date y end_date.
-    """
     try:
         aoi = ee.Geometry(polygon_geojson)
     except Exception as e:
@@ -61,37 +77,35 @@ def get_ndvi_stats(polygon_geojson, start_date, end_date):
         return []
 
     records = []
-    images  = collection.toList(min(size, 10))  # máximo 10 por ejecución
+    images  = collection.toList(min(size, 10))
 
     for i in range(images.size().getInfo()):
         try:
-            img  = ee.Image(images.get(i))
-            ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI')
-            date = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
-            cloud = img.get('CLOUDY_PIXEL_PERCENTAGE').getInfo()
+            img    = ee.Image(images.get(i))
+            ndvi   = img.normalizedDifference(['B8', 'B4']).rename('NDVI')
+            date   = ee.Date(img.get('system:time_start')).format('YYYY-MM-dd').getInfo()
+            cloud  = img.get('CLOUDY_PIXEL_PERCENTAGE').getInfo()
             img_id = img.get('system:index').getInfo()
 
             stats = ndvi.reduceRegion(
-                reducer=ee.Reducer.mean()
-                    .combine(ee.Reducer.min(), sharedInputs=True)
-                    .combine(ee.Reducer.max(), sharedInputs=True)
-                    .combine(ee.Reducer.stdDev(), sharedInputs=True),
-                geometry=aoi,
-                scale=10,
-                maxPixels=1e9
+                reducer   = ee.Reducer.mean()
+                              .combine(ee.Reducer.min(),    sharedInputs=True)
+                              .combine(ee.Reducer.max(),    sharedInputs=True)
+                              .combine(ee.Reducer.stdDev(), sharedInputs=True),
+                geometry  = aoi,
+                scale     = 10,
+                maxPixels = 1e9
             ).getInfo()
 
-            green_mask = ndvi.gt(0.3)
-            dense_mask = ndvi.gt(0.5)
-            green_pct  = green_mask.reduceRegion(ee.Reducer.mean(), aoi, 10).getInfo().get('NDVI', 0) or 0
-            dense_pct  = dense_mask.reduceRegion(ee.Reducer.mean(), aoi, 10).getInfo().get('NDVI', 0) or 0
+            green_pct = ndvi.gt(0.3).reduceRegion(ee.Reducer.mean(), aoi, 10).getInfo().get('NDVI', 0) or 0
+            dense_pct = ndvi.gt(0.5).reduceRegion(ee.Reducer.mean(), aoi, 10).getInfo().get('NDVI', 0) or 0
 
             records.append({
                 'date':            date,
-                'ndvi_mean':       round(float(stats.get('NDVI_mean') or 0), 4),
-                'ndvi_min':        round(float(stats.get('NDVI_min')  or 0), 4),
-                'ndvi_max':        round(float(stats.get('NDVI_max')  or 0), 4),
-                'ndvi_std':        round(float(stats.get('NDVI_stdDev') or 0), 4),
+                'ndvi_mean':       round(float(stats.get('NDVI_mean')    or 0), 4),
+                'ndvi_min':        round(float(stats.get('NDVI_min')     or 0), 4),
+                'ndvi_max':        round(float(stats.get('NDVI_max')     or 0), 4),
+                'ndvi_std':        round(float(stats.get('NDVI_stdDev')  or 0), 4),
                 'green_cover_pct': round(float(green_pct) * 100, 2),
                 'dense_veg_pct':   round(float(dense_pct) * 100, 2),
                 'cloud_cover':     round(float(cloud or 0), 1),
@@ -108,10 +122,11 @@ def get_ndvi_stats(polygon_geojson, start_date, end_date):
 
 # ── Procesar un proyecto ───────────────────────────────────────
 def process_project(project):
-    pid      = project['id']
-    name     = project['name']
-    area_ha  = float(project.get('area_ha') or 0)
-    polygon  = project.get('polygon')
+    pid          = project['id']
+    name         = project['name']
+    area_ha      = float(project.get('area_ha') or 0)
+    polygon      = project.get('polygon')
+    trees_planted = project.get('trees_planted') or 0
 
     print(f"\n{'='*50}")
     print(f"Proyecto: {pid} — {name}")
@@ -120,63 +135,63 @@ def process_project(project):
         print("  Sin polígono — saltando")
         return
 
-    # Fechas: último mes
     today      = datetime.date.today()
     start_date = (today - datetime.timedelta(days=35)).isoformat()
     end_date   = today.isoformat()
-
     print(f"  Período: {start_date} → {end_date}")
 
     records = get_ndvi_stats(polygon, start_date, end_date)
-
     if not records:
         print("  Sin imágenes disponibles para este período")
         return
 
-    # Guardar registros NDVI en Supabase
+    # Guardar registros NDVI
     for r in records:
         r['project_id'] = pid
         supabase.table('ndvi_records').upsert(r, on_conflict='project_id,date').execute()
 
-    # Calcular reporte de verificación
     current_ndvi = records[-1]['ndvi_mean']
 
-    # Obtener baseline (promedio histórico)
-    baseline_res = supabase.table('ndvi_records')\
-        .select('ndvi_mean')\
+    # Obtener baseline
+    baseline_res  = supabase.table('ndvi_records')\
+        .select('ndvi_mean, green_cover_pct')\
         .eq('project_id', pid)\
         .order('date')\
         .limit(3)\
         .execute()
 
-    baseline_ndvi = sum(r['ndvi_mean'] for r in baseline_res.data) / len(baseline_res.data) if baseline_res.data else current_ndvi * 0.5
-    delta_ndvi    = round(current_ndvi - baseline_ndvi, 4)
-    green_gain    = records[-1]['green_cover_pct'] - (baseline_res.data[0].get('green_cover_pct', 0) if baseline_res.data else 0)
-    biomass       = calc_biomass(current_ndvi, area_ha)
-    co2_kg        = calc_carbon(biomass) * 1000
-    trees_planted = project.get('trees_planted') or 0
-    survival      = min(0.95, max(0, 0.3 + delta_ndvi * 2))
-    trees_alive   = int(trees_planted * survival)
-    status        = classify_status(delta_ndvi, green_gain)
+    if baseline_res.data:
+        baseline_ndvi  = sum(r['ndvi_mean'] for r in baseline_res.data) / len(baseline_res.data)
+        baseline_green = baseline_res.data[0].get('green_cover_pct') or 0
+    else:
+        baseline_ndvi  = current_ndvi * 0.5
+        baseline_green = 0
+
+    delta_ndvi   = round(current_ndvi - baseline_ndvi, 4)
+    green_gain   = round(records[-1]['green_cover_pct'] - baseline_green, 2)
+    biomass      = calc_biomass(current_ndvi, area_ha)
+    co2_kg       = round(calc_carbon(biomass) * 1000, 1)
+    survival     = min(0.95, max(0, 0.3 + delta_ndvi * 2))
+    trees_alive  = int(trees_planted * survival)
+    status       = classify_status(delta_ndvi, green_gain)
 
     report = {
-        'project_id':             pid,
-        'report_date':            today.isoformat(),
-        'baseline_ndvi':          round(baseline_ndvi, 4),
-        'current_ndvi':           round(current_ndvi, 4),
-        'delta_ndvi':             delta_ndvi,
-        'green_cover_gain_pct':   round(green_gain, 2),
-        'estimated_trees_alive':  trees_alive,
-        'estimated_co2_kg':       round(co2_kg, 1),
-        'success_rate_pct':       round(survival * 100, 1),
-        'status':                 status,
-        'area_ha':                area_ha,
-        'methodology':            'NDVI derivado de Sentinel-2 L2A (ESA Copernicus, 10m/px). Baseline: promedio de primeras imágenes disponibles. CO₂ estimado via relación empírica AGB-NDVI.',
-        'report_hash':            hashlib.sha256(f"{pid}{today}{current_ndvi}".encode()).hexdigest(),
+        'project_id':            pid,
+        'report_date':           today.isoformat(),
+        'baseline_ndvi':         round(baseline_ndvi, 4),
+        'current_ndvi':          round(current_ndvi, 4),
+        'delta_ndvi':            delta_ndvi,
+        'green_cover_gain_pct':  green_gain,
+        'estimated_trees_alive': trees_alive,
+        'estimated_co2_kg':      co2_kg,
+        'success_rate_pct':      round(survival * 100, 1),
+        'status':                status,
+        'area_ha':               area_ha,
+        'methodology':           'NDVI derivado de Sentinel-2 L2A (ESA Copernicus, 10m/px). Baseline: promedio de primeras imágenes disponibles. CO₂ estimado via relación empírica AGB-NDVI.',
+        'report_hash':           hashlib.sha256(f"{pid}{today}{current_ndvi}".encode()).hexdigest(),
     }
 
     supabase.table('verification_reports').upsert(report, on_conflict='project_id,report_date').execute()
-
     print(f"  ✓ Reporte guardado — Estado: {status} — NDVI: {current_ndvi} — CO₂: {co2_kg:.0f} kg")
 
 # ── Main ───────────────────────────────────────────────────────
@@ -184,11 +199,9 @@ def main():
     print("ForestVerify — Pipeline NDVI")
     print(f"Fecha: {datetime.date.today()}")
 
-    # Obtener todos los proyectos con polígono
-    res = supabase.table('projects')\
+    res      = supabase.table('projects')\
         .select('id, name, area_ha, trees_planted, polygon, planting_date')\
         .execute()
-
     projects = res.data
     print(f"\nProyectos encontrados: {len(projects)}")
 
