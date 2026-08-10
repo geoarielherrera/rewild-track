@@ -281,7 +281,7 @@ function TileMap({ onPolygonChange }) {
             : <span style={{ fontSize:12, color:'#aaa' }}>Sin polígono definido</span>
           }
         </div>
-        <div style={{ display:'flex', gap:6' }}>
+        <div style={{ display:'flex', gap:6 }}>
           {showCloseBtn && (
             <button onClick={closePolygon} style={{ fontSize:12, padding:'6px 14px', borderRadius:8, border:'0.5px solid #1D9E75', background:'#EAF3DE', color:'#1D9E75', cursor:'pointer', fontWeight:500 }}>
               ✓ Cerrar polígono
