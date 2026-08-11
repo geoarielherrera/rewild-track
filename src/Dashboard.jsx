@@ -139,6 +139,12 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
               <StatCard icon="✅" label="Tasa de éxito"   value={`${report.success_rate_pct}%`}                 sub="supervivencia estimada"                  color={report.success_rate_pct > 70 ? '#1D9E75' : '#D85A30'} />
             </div>
 
+            {project.polygon && (
+              <div style={{ marginBottom: 14 }}>
+                <SatelliteMap geojson={project.polygon} height={280} />
+            </div>
+            )}
+
             <div style={{ background: '#fff', border: '0.5px solid #e8e8e4', borderRadius: 12, padding: '16px', marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Evolución NDVI</div>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 14 }}>Sentinel-2 · {series.length} imágenes · {project.area_ha} ha</div>
