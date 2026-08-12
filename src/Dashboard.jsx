@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { generateCertificatePDF } from './GeneratePDF'
 import { fetchProject, fetchNDVI, fetchLatestReport, fetchSponsor } from './supabase'
 import SatelliteMap from './SatelliteMap'
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
@@ -308,6 +309,11 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
           </div>
         )}
 
+        <button
+  onClick={() => generateCertificatePDF({ project, report, series, sponsor })}
+  style={{ width:'100%', marginTop:14, padding:'12px', background:'#0d3d2e', color:'white', border:'none', borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
+  📄 Descargar certificado PDF
+</button>
       </div>
     </div>
   )
