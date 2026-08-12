@@ -91,13 +91,16 @@ function DeleteModal({ project, onConfirm, onClose }) {
   async function confirm() {
     setDeleting(true)
     try {
-      await supabase.from('verification_reports').delete().eq('project_id', project.id)
-      await supabase.from('ndvi_records').delete().eq('project_id', project.id)
-      await supabase.from('sponsorships').delete().eq('project_id', project.id)
-      await supabase.from('alerts').delete().eq('project_id', project.id)
-      await supabase.from('projects').delete().eq('id', project.id)
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', project.id)
+      if (error) throw error
       onConfirm()
-    } catch(e) { alert('Error al eliminar: ' + e.message); setDeleting(false) }
+    } catch(e) { 
+      alert('Error al eliminar: ' + e.message)
+      setDeleting(false) 
+    }
   }
 
   return (
