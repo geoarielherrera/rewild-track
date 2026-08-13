@@ -90,6 +90,7 @@ export async function insertAlert(alert) {
     .single()
   if (error) throw error
   return data
+} // 👈 ¡Aquí agregamos la llave que faltaba!
 
 // ── AUTH ──────────────────────────────────────────────────────
 export async function getCurrentUser() {
@@ -105,5 +106,4 @@ export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => {
     callback(session?.user || null)
   })
-}
 }
