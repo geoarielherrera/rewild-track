@@ -90,4 +90,20 @@ export async function insertAlert(alert) {
     .single()
   if (error) throw error
   return data
+
+// ── AUTH ──────────────────────────────────────────────────────
+export async function getCurrentUser() {
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
+}
+
+export async function signOut() {
+  await supabase.auth.signOut()
+}
+
+export function onAuthChange(callback) {
+  return supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session?.user || null)
+  })
+}
 }

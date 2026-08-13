@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import Dashboard from './Dashboard'
 import Onboarding from './Onboarding'
-import { supabase } from './supabase'
+import Auth from './Auth'
+import { supabase, getCurrentUser, signOut, onAuthChange } from './supabase'
 
 // ── Modal de edición ──────────────────────────────────────────
 function EditModal({ project, onSave, onClose }) {
@@ -21,17 +22,14 @@ function EditModal({ project, onSave, onClose }) {
     if (!form.name) { setError('El nombre es obligatorio.'); return }
     setSaving(true); setError('')
     try {
-      const { error: err } = await supabase
-        .from('projects')
-        .update({
-          name:          form.name,
-          location_name: form.location_name,
-          description:   form.description,
-          trees_planted: +form.trees_planted || 0,
-          area_ha:       +form.area_ha       || 0,
-          planting_date: form.planting_date  || null,
-        })
-        .eq('id', project.id)
+      const { error: err } = await supabase.from('projects').update({
+        name:          form.name,
+        location_name: form.location_name,
+        description:   form.description,
+        trees_planted: +form.trees_planted || 0,
+        area_ha:       +form.area_ha       || 0,
+        planting_date: form.planting_date  || null,
+      }).eq('id', project.id)
       if (err) throw err
       onSave()
     } catch(e) { setError(e.message) }
@@ -47,13 +45,10 @@ function EditModal({ project, onSave, onClose }) {
           <h3 style={{ margin:0, fontSize:16, fontWeight:600 }}>Editar proyecto</h3>
           <button onClick={onClose} style={{ border:'none', background:'none', fontSize:20, cursor:'pointer', color:'#888' }}>×</button>
         </div>
-
         <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Nombre *</label>
         <input style={inp} value={form.name} onChange={e=>f('name',e.target.value)} />
-
         <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Localidad</label>
         <input style={inp} value={form.location_name} onChange={e=>f('location_name',e.target.value)} />
-
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <div>
             <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Árboles plantados</label>
@@ -64,15 +59,11 @@ function EditModal({ project, onSave, onClose }) {
             <input style={inp} type="number" step="0.1" value={form.area_ha} onChange={e=>f('area_ha',e.target.value)} />
           </div>
         </div>
-
         <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Fecha de plantación</label>
         <input style={inp} type="date" value={form.planting_date} onChange={e=>f('planting_date',e.target.value)} />
-
         <label style={{ fontSize:12, color:'#666', display:'block', marginBottom:4 }}>Descripción</label>
         <textarea style={{ ...inp, resize:'vertical', marginBottom:14 }} rows={3} value={form.description} onChange={e=>f('description',e.target.value)} />
-
         {error && <div style={{ background:'#FEF2F2', border:'0.5px solid #FECACA', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#991B1B', marginBottom:12 }}>{error}</div>}
-
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
           <button onClick={onClose} style={{ padding:'8px 20px', borderRadius:8, border:'0.5px solid #ddd', background:'#fff', fontSize:13, cursor:'pointer' }}>Cancelar</button>
           <button onClick={save} disabled={saving} style={{ padding:'8px 20px', borderRadius:8, border:'none', background:'#1D9E75', color:'#fff', fontSize:13, fontWeight:500, cursor:'pointer' }}>
@@ -84,23 +75,17 @@ function EditModal({ project, onSave, onClose }) {
   )
 }
 
-// ── Modal de confirmación de eliminación ──────────────────────
+// ── Modal de eliminación ──────────────────────────────────────
 function DeleteModal({ project, onConfirm, onClose }) {
   const [deleting, setDeleting] = useState(false)
 
   async function confirm() {
     setDeleting(true)
     try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', project.id)
+      const { error } = await supabase.from('projects').delete().eq('id', project.id)
       if (error) throw error
       onConfirm()
-    } catch(e) { 
-      alert('Error al eliminar: ' + e.message)
-      setDeleting(false) 
-    }
+    } catch(e) { alert('Error al eliminar: ' + e.message); setDeleting(false) }
   }
 
   return (
@@ -110,7 +95,7 @@ function DeleteModal({ project, onConfirm, onClose }) {
         <h3 style={{ margin:'0 0 8px', fontSize:16, fontWeight:600 }}>Eliminar proyecto</h3>
         <p style={{ fontSize:13, color:'#666', marginBottom:20 }}>
           ¿Estás seguro de que querés eliminar <b>{project.name}</b>?<br />
-          Se eliminarán también todos los registros NDVI y reportes asociados.
+          Se eliminarán todos los registros NDVI y reportes asociados.
         </p>
         <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
           <button onClick={onClose} style={{ padding:'9px 22px', borderRadius:8, border:'0.5px solid #ddd', background:'#fff', fontSize:13, cursor:'pointer' }}>Cancelar</button>
@@ -124,7 +109,7 @@ function DeleteModal({ project, onConfirm, onClose }) {
 }
 
 // ── Lista de proyectos ────────────────────────────────────────
-function ProjectList({ onSelect, onNew }) {
+function ProjectList({ user, onSelect, onNew, onSignOut }) {
   const [projects, setProjects] = useState([])
   const [loading,  setLoading]  = useState(true)
   const [editing,  setEditing]  = useState(null)
@@ -144,22 +129,31 @@ function ProjectList({ onSelect, onNew }) {
 
   return (
     <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', background:'#f5f5f2', minHeight:'100vh', paddingBottom:40 }}>
-
-      <nav style={{ background:'#0d3d2e', padding:'14px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <nav style={{ background:'#0d3d2e', padding:'12px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontSize:20 }}>🌳</span>
-          <span style={{ color:'#fff', fontWeight:700, fontSize:15 }}>ForestVerify</span>
+          <div>
+            <span style={{ color:'#fff', fontWeight:700, fontSize:15 }}>ForestVerify</span>
+            {user && <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)' }}>{user.email}</div>}
+          </div>
         </div>
-        <button onClick={onNew} style={{ background:'#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:500, cursor:'pointer' }}>
-          + Nuevo proyecto
-        </button>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {user && (
+            <button onClick={onSignOut} style={{ fontSize:12, color:'rgba(255,255,255,0.7)', background:'none', border:'0.5px solid rgba(255,255,255,0.3)', borderRadius:6, padding:'5px 12px', cursor:'pointer' }}>
+              Cerrar sesión
+            </button>
+          )}
+          <button onClick={onNew} style={{ background:'#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:500, cursor:'pointer' }}>
+            + Nuevo proyecto
+          </button>
+        </div>
       </nav>
 
       <div style={{ maxWidth:800, margin:'24px auto', padding:'0 16px' }}>
         <div style={{ marginBottom:20 }}>
           <h2 style={{ fontSize:20, fontWeight:600, margin:0, color:'#0d3d2e' }}>Mis proyectos</h2>
           <p style={{ fontSize:13, color:'#888', marginTop:4 }}>
-            {loading ? 'Cargando…' : `${projects.length} proyecto${projects.length !== 1 ? 's' : ''} registrado${projects.length !== 1 ? 's' : ''}`}
+            {loading ? 'Cargando…' : `${projects.length} proyecto${projects.length !== 1?'s':''} registrado${projects.length !== 1?'s':''}`}
           </p>
         </div>
 
@@ -184,39 +178,20 @@ function ProjectList({ onSelect, onNew }) {
         {!loading && projects.map(p => (
           <div key={p.id} style={{ background:'#fff', border:'0.5px solid #e8e8e4', borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-              {/* Info — clic para abrir dashboard */}
               <div style={{ flex:1, cursor:'pointer' }} onClick={() => onSelect(p.id)}>
                 <div style={{ fontSize:15, fontWeight:600, color:'#0d3d2e', marginBottom:3 }}>{p.name}</div>
-                <div style={{ fontSize:12, color:'#888' }}>
-                  📍 {p.location_name} · {p.trees_planted} árboles · {p.area_ha} ha
-                </div>
-                <div style={{ fontSize:11, color:'#aaa', marginTop:3 }}>
-                  Plantación: {p.planting_date} · ID: {p.id}
-                </div>
+                <div style={{ fontSize:12, color:'#888' }}>📍 {p.location_name} · {p.trees_planted} árboles · {p.area_ha} ha</div>
+                <div style={{ fontSize:11, color:'#aaa', marginTop:3 }}>Plantación: {p.planting_date} · ID: {p.id}</div>
               </div>
-              {/* Acciones */}
               <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:12 }}>
-                <button
-                  onClick={() => setEditing(p)}
-                  style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #ddd', background:'#fff', cursor:'pointer', color:'#555' }}>
-                  ✏️ Editar
-                </button>
-                <button
-                  onClick={() => setDeleting(p)}
-                  style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #FECACA', background:'#FEF2F2', cursor:'pointer', color:'#E24B4A' }}>
-                  🗑️ Eliminar
-                </button>
-                <button
-                  onClick={() => onSelect(p.id)}
-                  style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #1D9E75', background:'#EAF3DE', cursor:'pointer', color:'#1D9E75', fontWeight:500 }}>
-                  Ver →
-                </button>
+                <button onClick={() => setEditing(p)}  style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #ddd', background:'#fff', cursor:'pointer', color:'#555' }}>✏️ Editar</button>
+                <button onClick={() => setDeleting(p)} style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #FECACA', background:'#FEF2F2', cursor:'pointer', color:'#E24B4A' }}>🗑️ Eliminar</button>
+                <button onClick={() => onSelect(p.id)} style={{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'0.5px solid #1D9E75', background:'#EAF3DE', cursor:'pointer', color:'#1D9E75', fontWeight:500 }}>Ver →</button>
               </div>
             </div>
           </div>
         ))}
 
-        {/* Proyecto demo */}
         <div style={{ marginTop:16, borderTop:'0.5px solid #e8e8e4', paddingTop:16 }}>
           <div style={{ fontSize:12, color:'#aaa', marginBottom:8 }}>Proyecto de demostración</div>
           <div onClick={() => onSelect('PROJ-2024-001')} style={{ background:'#f0faf5', border:'0.5px solid #c8e6d8', borderRadius:12, padding:'14px 18px', cursor:'pointer' }}>
@@ -226,21 +201,8 @@ function ProjectList({ onSelect, onNew }) {
         </div>
       </div>
 
-      {/* Modales */}
-      {editing && (
-        <EditModal
-          project={editing}
-          onSave={() => { setEditing(null); load() }}
-          onClose={() => setEditing(null)}
-        />
-      )}
-      {deleting && (
-        <DeleteModal
-          project={deleting}
-          onConfirm={() => { setDeleting(null); load() }}
-          onClose={() => setDeleting(null)}
-        />
-      )}
+      {editing  && <EditModal  project={editing}  onSave={()=>{ setEditing(null);  load() }} onClose={()=>setEditing(null)}  />}
+      {deleting && <DeleteModal project={deleting} onConfirm={()=>{ setDeleting(null); load() }} onClose={()=>setDeleting(null)} />}
     </div>
   )
 }
@@ -249,17 +211,40 @@ function ProjectList({ onSelect, onNew }) {
 export default function App() {
   const [page,      setPage]      = useState('home')
   const [projectId, setProjectId] = useState(null)
+  const [user,      setUser]      = useState(undefined)
+
+  useEffect(() => {
+    getCurrentUser().then(setUser)
+    const { data: { subscription } } = onAuthChange(setUser)
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Cargando sesión
+  if (user === undefined) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
+      <div style={{ width:32, height:32, border:'3px solid #1D9E75', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
 
   function goToDashboard(pid) { setProjectId(pid); setPage('dashboard') }
-  function handleOnboardingSuccess(pid) { setProjectId(pid); setPage('dashboard') }
+  function handleSignOut()    { signOut(); setUser(null); setPage('home') }
 
-  if (page === 'onboarding') return <Onboarding onSuccess={handleOnboardingSuccess} />
+  if (page === 'auth') {
+    return <Auth onAuth={(u) => { setUser(u); setPage(u ? 'projects' : 'home') }} />
+  }
+
+  if (page === 'onboarding') {
+    return <Onboarding onSuccess={(pid) => { setProjectId(pid); setPage('dashboard') }} />
+  }
 
   if (page === 'projects') {
     return (
       <ProjectList
+        user={user}
         onSelect={goToDashboard}
-        onNew={() => setPage('onboarding')}
+        onNew={() => user ? setPage('onboarding') : setPage('auth')}
+        onSignOut={handleSignOut}
       />
     )
   }
@@ -272,7 +257,8 @@ export default function App() {
             <span style={{ fontSize:18 }}>🌳</span>
             <span style={{ color:'#fff', fontWeight:600, fontSize:14 }}>ForestVerify</span>
           </div>
-          <div style={{ display:'flex', gap:12 }}>
+          <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+            {user && <button onClick={handleSignOut} style={{ fontSize:12, color:'rgba(255,255,255,0.6)', background:'none', border:'0.5px solid rgba(255,255,255,0.3)', borderRadius:6, padding:'4px 10px', cursor:'pointer' }}>Cerrar sesión</button>}
             <button onClick={() => setPage('projects')} style={{ fontSize:12, color:'rgba(255,255,255,0.7)', background:'none', border:'none', cursor:'pointer' }}>← Mis proyectos</button>
             <button onClick={() => setPage('home')}     style={{ fontSize:12, color:'rgba(255,255,255,0.5)', background:'none', border:'none', cursor:'pointer' }}>Inicio</button>
           </div>
@@ -282,7 +268,7 @@ export default function App() {
     )
   }
 
-  // ── LANDING PAGE ─────────────────────────────────────────────
+  // ── LANDING PAGE ──────────────────────────────────────────────
   return (
     <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', background:'#f5f5f2', minHeight:'100vh' }}>
       <nav style={{ background:'#0d3d2e', padding:'14px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -290,9 +276,18 @@ export default function App() {
           <span style={{ fontSize:22 }}>🌳</span>
           <span style={{ color:'#fff', fontWeight:700, fontSize:16 }}>ForestVerify</span>
         </div>
-        <div style={{ display:'flex', gap:12 }}>
-          <button onClick={() => setPage('projects')} style={{ fontSize:13, color:'rgba(255,255,255,0.8)', background:'none', border:'none', cursor:'pointer' }}>Mis proyectos</button>
-          <button onClick={() => setPage('onboarding')} style={{ background:'#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:500, cursor:'pointer' }}>Registrar proyecto</button>
+        <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+          {user
+            ? <>
+                <span style={{ fontSize:12, color:'rgba(255,255,255,0.6)' }}>{user.email}</span>
+                <button onClick={() => setPage('projects')} style={{ fontSize:13, color:'rgba(255,255,255,0.8)', background:'none', border:'none', cursor:'pointer' }}>Mis proyectos</button>
+                <button onClick={handleSignOut} style={{ fontSize:12, color:'rgba(255,255,255,0.6)', background:'none', border:'0.5px solid rgba(255,255,255,0.3)', borderRadius:6, padding:'5px 12px', cursor:'pointer' }}>Cerrar sesión</button>
+              </>
+            : <>
+                <button onClick={() => setPage('auth')} style={{ fontSize:13, color:'rgba(255,255,255,0.8)', background:'none', border:'none', cursor:'pointer' }}>Iniciar sesión</button>
+                <button onClick={() => setPage('onboarding')} style={{ background:'#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontSize:13, fontWeight:500, cursor:'pointer' }}>Registrar proyecto</button>
+              </>
+          }
         </div>
       </nav>
 
