@@ -65,7 +65,7 @@ function TileMap({ onPolygonChange }) {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     const sub = ['a','b','c'][(x + y) % 3]
-    img.src = `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`
+    img.src = `https://mt1.google.com/vt/lyrs=y&x=${x}&y=${y}&z=${z}`
     img.onload  = () => { tilesRef.current[key] = img; cb(img) }
     img.onerror = () => { tilesRef.current[key] = null; cb(null) }
   }
@@ -121,7 +121,7 @@ function TileMap({ onPolygonChange }) {
     }
     // Atribución
     ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(0,h-18,165,18)
-    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.fillText('© OpenStreetMap contributors',4,h-5)
+    ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.fillText('© Google Maps',4,h-5)
     // Botones zoom
     ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(8,8,28,60)
     ctx.fillStyle = '#444'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('+',14,30)
