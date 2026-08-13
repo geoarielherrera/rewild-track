@@ -6,10 +6,13 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── PROYECTOS ─────────────────────────────────────────────────
-export async function fetchProjects() {
+export async function fetchProjects(userId) {
+  if (!userId) return []
+
   const { data, error } = await supabase
     .from('projects')
     .select('*')
+    .eq('user_id', userId) // 👈 Agregamos este filtro
     .order('created_at', { ascending: false })
   if (error) throw error
   return data

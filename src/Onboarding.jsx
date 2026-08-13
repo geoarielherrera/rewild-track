@@ -64,7 +64,6 @@ function TileMap({ onPolygonChange }) {
     if (tilesRef.current[key]) { cb(tilesRef.current[key]); return }
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    const sub = ['a','b','c'][(x + y) % 3]
     img.src = `https://mt1.google.com/vt/lyrs=y&x=${x}&y=${y}&z=${z}`
     img.onload  = () => { tilesRef.current[key] = img; cb(img) }
     img.onerror = () => { tilesRef.current[key] = null; cb(null) }
@@ -191,7 +190,6 @@ function TileMap({ onPolygonChange }) {
   function handleMouseUp() { dragRef.current = null }
 
   function handleClick(e) {
-    // Si fue un drag, ignorar
     if (isDragging.current) return
 
     const rect = canvasRef.current.getBoundingClientRect()
@@ -200,7 +198,6 @@ function TileMap({ onPolygonChange }) {
     const w  = canvasRef.current.width
     const h  = canvasRef.current.height
 
-    // Botones zoom
     if (px >= 8 && px <= 36) {
       if (py >= 8  && py <= 36) { viewRef.current = { ...viewRef.current, zoom: Math.min(18, viewRef.current.zoom+1) }; tilesRef.current = {}; draw(); return }
       if (py >= 38 && py <= 66) { viewRef.current = { ...viewRef.current, zoom: Math.max(8,  viewRef.current.zoom-1) }; tilesRef.current = {}; draw(); return }
@@ -408,6 +405,9 @@ function StepConfirm({ data, onSuccess }) {
     if (!agreed) { alert('Aceptá los términos para continuar.'); return }
     setSaving(true); setError('')
     try {
+      // 1. Obtener el usuario autenticado
+      const { data: { user } } = await supabase.auth.getUser()
+
       const projectId = `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
 
       // Guardar organización
@@ -426,10 +426,11 @@ function StepConfirm({ data, onSuccess }) {
       if (orgErr) throw orgErr
       const org = orgData[0]
 
-      // Guardar proyecto — incluye el polígono como GeoJSON
+      // Guardar proyecto — incluye el polígono como GeoJSON y el id del usuario activo
       const projectPayload = {
         id:            projectId,
         ong_id:        org.id,
+        user_id:       user ? user.id : null,
         name:          data.project_name,
         location_name: data.location,
         biome:         data.biome,
@@ -442,7 +443,6 @@ function StepConfirm({ data, onSuccess }) {
         description:   data.description,
       }
 
-      // Agregar polígono si existe — usar ST_GeomFromGeoJSON via RPC
       const { error: projErr } = await supabase
         .from('projects')
         .insert([projectPayload])

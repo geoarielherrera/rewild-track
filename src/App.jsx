@@ -116,10 +116,12 @@ function ProjectList({ user, onSelect, onNew, onSignOut }) {
   const [deleting, setDeleting] = useState(null)
 
   async function load() {
+    if (!user) { setProjects([]); setLoading(false); return } // 👈 Si no hay usuario, vaciamos
     setLoading(true)
     const { data } = await supabase
       .from('projects')
       .select('id, name, location_name, planting_date, trees_planted, area_ha, created_at')
+      .eq('user_id', user.id) // 👈 ESTA LÍNEA ES LA CLAVE: solo trae los proyectos del usuario logueado
       .order('created_at', { ascending: false })
     setProjects(data || [])
     setLoading(false)
