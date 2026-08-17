@@ -20,7 +20,7 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install earthengine-api supabase
+          pip install earthengine-api supabase python-dateutil
 
       - name: Autenticar Google Earth Engine
         run: |
