@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 const STEPS = ['Organización', 'Proyecto', 'Polígono', 'Árboles', 'Confirmación']
 const SPECIES_OPTIONS = ['Molle de beber','Tala','Espinillo','Quebracho blanco','Quebracho colorado','Algarrobo blanco','Algarrobo negro','Ceibo','Lapacho','Mistol','Piquillín','Brea','Chañar','Coco','Otra nativa']
 const BIOME_OPTIONS = ['Bosque chaqueño serrano','Bosque ribereño','Monte arbustivo','Pastizal de altura','Espinal','Otro']
-const VERIF_FREQ = ['Mensual','Trimestral','Semestral','Anual']
+const VERIF_FREQ = ['Trimestral','Semestral','Anual']
 const UNQUILLO = { lat: -31.2333, lng: -64.3167 }
 
 const inp = { width:'100%', padding:'8px 10px', border:'0.5px solid #ddd', borderRadius:8, fontSize:13, fontFamily:'inherit', background:'#fff', boxSizing:'border-box' }
@@ -340,7 +340,7 @@ function StepProject({ data, onChange }) {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <Field label="Fecha de plantación" required><input style={inp} type="date" value={data.planting_date||''} onChange={e=>f('planting_date',e.target.value)} /></Field>
         <Field label="Verificación satelital">
-          <select style={inp} value={data.verif_freq||'Mensual'} onChange={e=>f('verif_freq',e.target.value)}>
+          <select style={inp} value={data.verif_freq||'Trimestral'} onChange={e=>f('verif_freq',e.target.value)}>
             {VERIF_FREQ.map(v=><option key={v}>{v}</option>)}
           </select>
         </Field>
@@ -398,7 +398,7 @@ function StepTrees({ data, onChange }) {
 function StepConfirm({ data, onSuccess }) {
   const [agreed, setAgreed] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [pid, setPid]       = useState(null)
+  const [pid, setPid]        = useState(null)
   const [error, setError]   = useState('')
 
   async function submit() {
