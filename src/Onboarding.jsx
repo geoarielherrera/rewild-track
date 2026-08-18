@@ -470,10 +470,19 @@ function StepConfirm({ data, onSuccess }) {
       <div style={{ fontSize:52, marginBottom:14 }}>🌱</div>
       <div style={{ fontSize:18, fontWeight:600, marginBottom:8 }}>¡Proyecto registrado!</div>
       <div style={{ fontSize:13, color:'#666', marginBottom:20 }}>El sistema comenzará a monitorear el área con Sentinel-2.</div>
+      
       <div style={{ background:'#EAF3DE', borderRadius:12, padding:'14px 28px', display:'inline-block', marginBottom:14 }}>
         <div style={{ fontSize:11, color:'#5a9e2f', marginBottom:4 }}>ID DE PROYECTO</div>
         <div style={{ fontFamily:'monospace', fontSize:18, fontWeight:700, color:'#27500A' }}>{pid}</div>
       </div>
+
+      {/* Densidad de árboles por hectárea */}
+      {data.area_ha && data.trees_planted && (
+        <div style={{ display:'block', fontSize:13, color:'#3B6D11', background:'#f0f7f4', border:'0.5px solid #c8e6d8', borderRadius:8, padding:'8px 16px', margin:'0 auto 14px', maxWidth:'280px' }}>
+          🌲 <b>{(data.trees_planted / data.area_ha).toFixed(0)}</b> árboles / ha ({data.trees_planted} árboles en {data.area_ha} ha)
+        </div>
+      )}
+
       <div style={{ fontSize:12, color:'#888' }}>Guardá este ID — lo necesitás para acceder al dashboard.</div>
     </div>
   )
