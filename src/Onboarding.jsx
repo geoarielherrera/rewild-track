@@ -308,6 +308,9 @@ function StepOrg({ data, onChange }) {
         <Field label="Responsable" required><input style={inp} value={data.contact_name||''} onChange={e=>f('contact_name',e.target.value)} /></Field>
         <Field label="Email" required><input style={inp} type="email" value={data.contact_email||''} onChange={e=>f('contact_email',e.target.value)} /></Field>
       </div>
+      <Field label="Contraseña para tu cuenta" required hint="Mínimo 6 caracteres">
+        <input style={inp} type="password" value={data.password||''} onChange={e=>f('password',e.target.value)} placeholder="••••••••" />
+      </Field>
       <Field label="Descripción"><textarea style={{ ...inp, resize:'vertical' }} rows={3} value={data.ong_desc||''} onChange={e=>f('ong_desc',e.target.value)} placeholder="Misión, años de trabajo, área geográfica..." /></Field>
       <Field label="¿Tienen personería jurídica?">
         <div style={{ display:'flex', gap:14, marginTop:4 }}>
@@ -405,12 +408,17 @@ function StepConfirm({ data, onSuccess }) {
     if (!agreed) { alert('Aceptá los términos para continuar.'); return }
     setSaving(true); setError('')
     try {
-      // 1. Obtener el usuario autenticado
-      const { data: { user } } = await supabase.auth.getUser()
+      // 1. Crear la cuenta de usuario en Supabase Auth
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: data.contact_email,
+        password: data.password,
+      })
+      if (authErr) throw authErr
 
+      const userId = authData.user?.id
       const projectId = `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
 
-      // Guardar organización
+      // 2. Guardar organización (incluyendo el user_id)
       const { data: orgData, error: orgErr } = await supabase
         .from('organizations')
         .insert([{
@@ -421,16 +429,17 @@ function StepConfirm({ data, onSuccess }) {
           website:       data.website,
           legal_status:  data.legal,
           description:   data.ong_desc,
+          user_id:       userId // Enlaza con auth.users
         }])
         .select()
       if (orgErr) throw orgErr
       const org = orgData[0]
 
-      // Guardar proyecto — incluye el polígono como GeoJSON y el id del usuario activo
+      // 3. Guardar proyecto vinculando el user_id
       const projectPayload = {
         id:            projectId,
         ong_id:        org.id,
-        user_id:       user ? user.id : null,
+        user_id:       userId, // Enlaza con auth.users
         name:          data.project_name,
         location_name: data.location,
         biome:         data.biome,
@@ -448,7 +457,7 @@ function StepConfirm({ data, onSuccess }) {
         .insert([projectPayload])
       if (projErr) throw projErr
 
-      // Guardar polígono por separado con SQL si existe
+      // 4. Guardar polígono
       if (data.polygon) {
         await supabase.rpc('set_project_polygon', {
           project_id:   projectId,
@@ -536,7 +545,8 @@ export default function Onboarding({ onSuccess }) {
   const [data, setData] = useState({})
 
   const canNext = [
-    () => data.ong_name && data.contact_name && data.contact_email,
+    // Se añade data.password para obligar a ingresarla antes de avanzar
+    () => data.ong_name && data.contact_name && data.contact_email && data.password && data.password.length >= 6,
     () => data.project_name && data.planting_date && data.location,
     () => !!data.polygon,
     () => data.trees_planted && (data.species||[]).length > 0,
