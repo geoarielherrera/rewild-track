@@ -109,22 +109,28 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
   const deltaNdvi    = report?.delta_ndvi    || 0
   const months       = Math.round((new Date() - new Date(project.planting_date)) / (1000*60*60*24*30))
   const trend        = ndviTrend(series)
-  // Encuentra el punto del gráfico (en 'series') más cercano a la fecha de plantación
-const plantMonth = useMemo(() => {
+  const plantMonth = (() => {
   if (!project?.planting_date || !series || series.length === 0) return null;
   
   const plantTime = new Date(project.planting_date).getTime();
   
-  const closest = series.reduce((prev, curr) => {
-    // Si 'date' viene en formato YYYY-MM, le agregamos '-01' para convertirlo a fecha válida
-    const prevTime = new Date(prev.date.length === 7 ? `${prev.date}-01` : prev.date).getTime();
-    const currTime = new Date(curr.date.length === 7 ? `${curr.date}-01` : curr.date).getTime();
-    
-    return Math.abs(currTime - plantTime) < Math.abs(prevTime - plantTime) ? curr : prev;
+  let closestDate = series[0].date;
+  let minDiff = Infinity;
+
+  series.forEach((item) => {
+    if (!item?.date) return;
+    const itemDateStr = item.date.length === 7 ? `${item.date}-01` : item.date;
+    const itemTime = new Date(itemDateStr).getTime();
+    const diff = Math.abs(itemTime - plantTime);
+
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestDate = item.date;
+    }
   });
-  
-  return closest?.date || null;
-}, [project?.planting_date, series]);
+
+  return closestDate;
+})();
   
   return (
     <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', background:'#f5f5f2', minHeight:'100vh', paddingBottom:40 }}>
