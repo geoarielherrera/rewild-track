@@ -109,8 +109,10 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
   const deltaNdvi    = report?.delta_ndvi    || 0
   const months       = Math.round((new Date() - new Date(project.planting_date)) / (1000*60*60*24*30))
   const trend        = ndviTrend(series)
-  const plantMonth   = project.planting_date?.slice(0,7)
-
+  const plantMonth = project?.planting_date 
+  ? project.planting_date.slice(0, 7) 
+  : null;
+  
   return (
     <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', background:'#f5f5f2', minHeight:'100vh', paddingBottom:40 }}>
 
