@@ -415,31 +415,38 @@ function StepConfirm({ data, onSuccess }) {
       })
       if (authErr) throw authErr
 
+      // Validación de usuario duplicado
+      if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
+        throw new Error('El correo electrónico ya se encuentra registrado. Por favor, iniciá sesión o utilizá otro correo.')
+      }
+
       const userId = authData.user?.id
+      if (!userId) throw new Error('No se pudo obtener el identificador de usuario.')
+
       const projectId = `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
 
-      // 2. Guardar organización (incluyendo el user_id)
+      // 2. Guardar organización
       const { data: orgData, error: orgErr } = await supabase
         .from('organizations')
         .insert([{
           name:          data.ong_name,
-          country:       data.country,
+          country:        data.country,
           contact_name:  data.contact_name,
           contact_email: data.contact_email,
           website:       data.website,
           legal_status:  data.legal,
           description:   data.ong_desc,
-          user_id:       userId // Enlaza con auth.users
+          user_id:       userId
         }])
         .select()
       if (orgErr) throw orgErr
       const org = orgData[0]
 
-      // 3. Guardar proyecto vinculando el user_id
+      // 3. Guardar proyecto
       const projectPayload = {
         id:            projectId,
         ong_id:        org.id,
-        user_id:       userId, // Enlaza con auth.users
+        user_id:       userId,
         name:          data.project_name,
         location_name: data.location,
         biome:         data.biome,
@@ -451,6 +458,28 @@ function StepConfirm({ data, onSuccess }) {
         verif_freq:    data.verif_freq,
         description:   data.description,
       }
+
+      const { error: projErr } = await supabase
+        .from('projects')
+        .insert([projectPayload])
+      if (projErr) throw projErr
+
+      // 4. Guardar polígono
+      if (data.polygon) {
+        await supabase.rpc('set_project_polygon', {
+          project_id:   projectId,
+          geojson_text: JSON.stringify(data.polygon),
+        })
+      }
+
+      setPid(projectId)
+      if (onSuccess) onSuccess(projectId)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
       const { error: projErr } = await supabase
         .from('projects')
