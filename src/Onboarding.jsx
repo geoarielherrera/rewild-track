@@ -552,7 +552,6 @@ export default function Onboarding({ onSuccess }) {
   const [data, setData] = useState({})
 
   const canNext = [
-    // Se añade data.password para obligar a ingresarla antes de avanzar
     () => data.ong_name && data.contact_name && data.contact_email && data.password && data.password.length >= 6,
     () => data.project_name && data.planting_date && data.location,
     () => !!data.polygon,
