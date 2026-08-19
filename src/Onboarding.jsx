@@ -408,44 +408,64 @@ function StepConfirm({ data, onSuccess }) {
     if (!agreed) { alert('Aceptá los términos para continuar.'); return }
     setSaving(true); setError('')
     try {
-      // 1. Crear la cuenta de usuario en Supabase Auth
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: data.contact_email,
-        password: data.password,
-      })
-      if (authErr) throw authErr
+      let userId = null
 
-      // Validación de usuario duplicado
-      if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
-        throw new Error('El correo electrónico ya se encuentra registrado. Por favor, iniciá sesión o utilizá otro correo.')
+      // 1. Verificar si hay sesión activa
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session?.user) {
+        userId = session.user.id
+      } else {
+        // Intentar registrar usuario nuevo
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: data.contact_email,
+          password: data.password,
+        })
+        if (authErr) throw authErr
+
+        if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
+          throw new Error('Este correo ya se encuentra registrado. Iniciá sesión en la plataforma antes de cargar un nuevo proyecto.')
+        }
+
+        userId = authData.user?.id
       }
 
-      const userId = authData.user?.id
-      if (!userId) throw new Error('No se pudo obtener el identificador de usuario.')
+      if (!userId) throw new Error('No se pudo determinar la identidad del usuario.')
 
       const projectId = `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random()*900)+100)}`
 
-      // 2. Guardar organización
-      const { data: orgData, error: orgErr } = await supabase
+      // 2. Obtener o crear la organización
+      let orgId = null
+      const { data: existingOrgs } = await supabase
         .from('organizations')
-        .insert([{
-          name:          data.ong_name,
-          country:        data.country,
-          contact_name:  data.contact_name,
-          contact_email: data.contact_email,
-          website:       data.website,
-          legal_status:  data.legal,
-          description:   data.ong_desc,
-          user_id:       userId
-        }])
-        .select()
-      if (orgErr) throw orgErr
-      const org = orgData[0]
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1)
 
-      // 3. Guardar proyecto
+      if (existingOrgs && existingOrgs.length > 0) {
+        orgId = existingOrgs[0].id
+      } else {
+        const { data: orgData, error: orgErr } = await supabase
+          .from('organizations')
+          .insert([{
+            name:          data.ong_name,
+            country:        data.country,
+            contact_name:  data.contact_name,
+            contact_email: data.contact_email,
+            website:       data.website,
+            legal_status:  data.legal,
+            description:   data.ong_desc,
+            user_id:       userId
+          }])
+          .select()
+        if (orgErr) throw orgErr
+        orgId = orgData[0].id
+      }
+
+      // 3. Guardar el nuevo proyecto
       const projectPayload = {
         id:            projectId,
-        ong_id:        org.id,
+        ong_id:        orgId,
         user_id:       userId,
         name:          data.project_name,
         location_name: data.location,
@@ -492,7 +512,6 @@ function StepConfirm({ data, onSuccess }) {
         <div style={{ fontFamily:'monospace', fontSize:18, fontWeight:700, color:'#27500A' }}>{pid}</div>
       </div>
 
-      {/* Densidad de árboles por hectárea */}
       {data.area_ha && data.trees_planted && (
         <div style={{ display:'block', fontSize:13, color:'#3B6D11', background:'#f0f7f4', border:'0.5px solid #c8e6d8', borderRadius:8, padding:'8px 16px', margin:'0 auto 14px', maxWidth:'280px' }}>
           🌲 <b>{(data.trees_planted / data.area_ha).toFixed(0)}</b> árboles / ha ({data.trees_planted} árboles en {data.area_ha} ha)
