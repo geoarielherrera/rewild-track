@@ -481,28 +481,6 @@ function StepConfirm({ data, onSuccess }) {
     }
   }
 
-      const { error: projErr } = await supabase
-        .from('projects')
-        .insert([projectPayload])
-      if (projErr) throw projErr
-
-      // 4. Guardar polígono
-      if (data.polygon) {
-        await supabase.rpc('set_project_polygon', {
-          project_id:   projectId,
-          geojson_text: JSON.stringify(data.polygon),
-        })
-      }
-
-      setPid(projectId)
-      if (onSuccess) onSuccess(projectId)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   if (pid) return (
     <div style={{ textAlign:'center', padding:'30px 10px' }}>
       <div style={{ fontSize:52, marginBottom:14 }}>🌱</div>
