@@ -382,7 +382,7 @@ export default function Dashboard({ projectId = 'PROJ-2024-001' }) {
 
             {report && (
               <button
-                onClick={() => generateCertificatePDF({ project, report, series, sponsor })}
+                onClick={() => generateCertificatePDF({ project, report, series: series || [], sponsor })}
                 style={{ width:'100%', padding:'12px', background:'#0d3d2e', color:'white', border:'none', borderRadius:10, fontSize:14, fontWeight:500, cursor:'pointer' }}>
                 📄 Descargar certificado PDF
               </button>

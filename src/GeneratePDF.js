@@ -240,8 +240,7 @@ export async function generateCertificatePDF({ project = {}, report = {}, series
   pdf.text('Evolucion NDVI Estival (Sentinel-2)', margin, y + 3)
   y += 5.5
 
-  drawNDVIChart(pdf, margin, y, W - margin*2, 26, series, project.planting_date)
-  y += 29.5
+  drawNDVIChart(pdf, margin, y, W - margin*2, 34, series || [], project.planting_date)
 
   // ── MÉTRICAS (12 ítems = 6 filas de 9.5mm = 57mm) ────────────
   const metrics = [
