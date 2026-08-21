@@ -91,68 +91,78 @@ function drawNDVIColorMap(pdf, x, y, w, h, ndviValue, label) {
 
 // ── Dibujar gráfico NDVI ──────────────────────────────────────
 function drawNDVIChart(pdf, x, y, w, h, series, plantingDate) {
-  if (!series || series.length === 0) return
+  if (!series || !Array.isArray(series) || series.length === 0) return
 
-  const maxNDVI  = 0.8
-  const padLeft  = 7, padRight = 3, padTop = 3, padBottom = 8
-  const chartW   = w - padLeft - padRight
-  const chartH   = h - padTop - padBottom
+  const validSeries = series.filter(r => r && typeof r.ndvi_mean === 'number')
+  if (validSeries.length === 0) return
 
+  const maxNDVI   = 0.8
+  const padLeft   = 8, padRight = 4, padTop = 4, padBottom = 12
+  const chartW    = w - padLeft - padRight
+  const chartH    = h - padTop - padBottom
+
+  // Fondo
   pdf.setFillColor(248, 250, 248)
   pdf.rect(x, y, w, h, 'F')
   pdf.setDrawColor(220, 230, 220)
   pdf.rect(x, y, w, h)
 
-  [0.3, 0.5].forEach(ref => {
+  // Líneas de referencia
+  const refs = [0.2, 0.3, 0.5, 0.7]
+  refs.forEach(ref => {
     const ry = y + padTop + chartH - (ref / maxNDVI) * chartH
-    pdf.setDrawColor(ref === 0.3 ? 186 : 29, ref === 0.3 ? 117 : 158, ref === 0.3 ? 23 : 117)
-    pdf.setLineDashPattern([1, 1], 0)
+    if (ref === 0.3) pdf.setDrawColor(186, 117, 23)
+    else if (ref === 0.5) pdf.setDrawColor(29, 158, 117)
+    else pdf.setDrawColor(200, 200, 200)
+    pdf.setLineDashPattern([1.5, 1], 0)
     pdf.line(x + padLeft, ry, x + padLeft + chartW, ry)
     pdf.setLineDashPattern([], 0)
     pdf.setTextColor(150, 150, 150)
-    pdf.setFontSize(4.5)
-    pdf.text(ref.toFixed(1), x + padLeft - 1, ry + 1, { align: 'right' })
+    pdf.setFontSize(5)
+    pdf.text(ref.toFixed(1), x + padLeft - 1, ry + 1.5, { align: 'right' })
   })
 
-  if (plantingDate && series.length > 0) {
+  // Línea vertical plantación
+  if (plantingDate) {
     const plantMonth = plantingDate.slice(0, 7)
-    const idx = series.findIndex(r => r.date >= plantMonth)
-    if (idx >= 0) {
-      const lx = x + padLeft + (idx / Math.max(series.length - 1, 1)) * chartW
+    const idx = validSeries.findIndex(r => r.date >= plantMonth)
+    if (idx >= 0 && validSeries.length > 1) {
+      const lx = x + padLeft + (idx / (validSeries.length - 1)) * chartW
       pdf.setDrawColor(226, 75, 74)
-      pdf.setLineDashPattern([1, 1], 0)
+      pdf.setLineDashPattern([1.5, 1], 0)
       pdf.line(lx, y + padTop, lx, y + padTop + chartH)
       pdf.setLineDashPattern([], 0)
       pdf.setTextColor(226, 75, 74)
-      pdf.setFontSize(4.5)
-      pdf.text('Plantacion', lx + 1, y + padTop + 4)
+      pdf.setFontSize(5)
+      pdf.text('Plantacion', lx + 1, y + padTop + 5)
     }
   }
 
-  if (series.length > 1) {
-    const pts = series.map((r, i) => ({
-      x: x + padLeft + (i / (series.length - 1)) * chartW,
+  // Curva NDVI
+  if (validSeries.length > 1) {
+    const pts = validSeries.map((r, i) => ({
+      x: x + padLeft + (i / (validSeries.length - 1)) * chartW,
       y: y + padTop + chartH - (Math.min(r.ndvi_mean, maxNDVI) / maxNDVI) * chartH
     }))
 
-    pts.forEach((p, i) => {
-      if (i === 0) return
-      const prev = pts[i-1]
-      pdf.setDrawColor(29, 158, 117)
-      pdf.setLineWidth(0.6)
-      pdf.line(prev.x, prev.y, p.x, p.y)
-    })
+    pdf.setDrawColor(29, 158, 117)
+    pdf.setLineWidth(0.8)
+    for (let i = 1; i < pts.length; i++) {
+      pdf.line(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y)
+    }
 
+    // Puntos
     pts.forEach(p => {
       pdf.setFillColor(29, 158, 117)
-      pdf.circle(p.x, p.y, 0.6, 'F')
+      pdf.circle(p.x, p.y, 0.8, 'F')
     })
   }
 
+  // Etiquetas eje X
   pdf.setTextColor(120, 120, 120)
-  pdf.setFontSize(4.5)
-  if (series[0])               pdf.text(series[0].date?.slice(0,7)||'', x + padLeft, y + h - 1.5)
-  if (series[series.length-1]) pdf.text(series[series.length-1].date?.slice(0,7)||'', x + padLeft + chartW, y + h - 1.5, { align: 'right' })
+  pdf.setFontSize(5)
+  if (validSeries[0])                    pdf.text(validSeries[0].date?.slice(0,7)||'',                    x + padLeft,          y + h - 2)
+  if (validSeries[validSeries.length-1]) pdf.text(validSeries[validSeries.length-1].date?.slice(0,7)||'', x + padLeft + chartW, y + h - 2, { align:'right' })
 }
 
 // ── Generador principal ───────────────────────────────────────
